@@ -1,0 +1,306 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>灵感导航塔 V2.3 (编辑功能版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .content-node { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+        .content-node.open { max-height: 5000px; transition: max-height 0.5s ease-in; }
+        .icon { transition: transform 0.3s; }
+        .icon.open { transform: rotate(90deg); }
+        .tag { display: inline-block; background-color: #374151; color: #D1D5DB; padding: 2px 8px; margin: 2px; border-radius: 9999px; font-size: 0.75rem; }
+        #move-modal-options button { text-align: left; }
+        #move-modal-options button:hover { background-color: #374151; }
+        .modal-input { background-color: #1F2937; border: 1px solid #4B5563; color: #D1D5DB; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white font-sans antialiased">
+
+    <div class="container mx-auto p-4 md:p-6 max-w-3xl">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold text-teal-400">灵感导航塔 V2.3 ✏️</h1>
+            <p class="text-gray-400 mt-2">新增“编辑”功能，完善你的灵感库</p>
+        </header>
+
+        <section class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6">
+            <button id="add-project-btn" class="w-full bg-teal-600 hover:bg-teal-700 p-3 rounded-md font-bold text-lg transition-colors">🚀 新建顶层项目</button>
+        </section>
+
+        <main id="projects-container"></main>
+    </div>
+
+    <!-- 移动模态框 (来自V2.2) -->
+    <div id="move-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+        <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-md flex flex-col">
+            <div id="move-modal-title" class="p-4 border-b border-gray-700 text-lg font-semibold text-gray-300">移动到...</div>
+            <div id="move-modal-options" class="p-2 space-y-1 overflow-y-auto" style="max-height: 60vh;"></div>
+            <div class="p-3 border-t border-gray-700 text-right bg-gray-900/50 rounded-b-lg">
+                <button id="move-modal-close" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-md text-white transition-colors">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- 新增的编辑链接模态框 --- -->
+    <div id="edit-link-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+        <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-md flex flex-col">
+            <div class="p-4 border-b border-gray-700 text-lg font-semibold text-gray-300">编辑链接信息</div>
+            <div class="p-4 space-y-4">
+                <div>
+                    <label for="edit-link-name" class="block text-sm font-medium text-gray-400 mb-1">名称</label>
+                    <input type="text" id="edit-link-name" class="w-full p-2 rounded-md modal-input">
+                </div>
+                <div>
+                    <label for="edit-link-url" class="block text-sm font-medium text-gray-400 mb-1">URL</label>
+                    <input type="url" id="edit-link-url" class="w-full p-2 rounded-md modal-input">
+                </div>
+                <div>
+                    <label for="edit-link-author" class="block text-sm font-medium text-gray-400 mb-1">作者</label>
+                    <input type="text" id="edit-link-author" class="w-full p-2 rounded-md modal-input">
+                </div>
+                <div>
+                    <label for="edit-link-category" class="block text-sm font-medium text-gray-400 mb-1">门类</label>
+                    <input type="text" id="edit-link-category" class="w-full p-2 rounded-md modal-input">
+                </div>
+                <div>
+                    <label for="edit-link-tags" class="block text-sm font-medium text-gray-400 mb-1">标签 (用英文逗号 , 分隔)</label>
+                    <input type="text" id="edit-link-tags" class="w-full p-2 rounded-md modal-input">
+                </div>
+            </div>
+            <div class="p-3 border-t border-gray-700 text-right bg-gray-900/50 rounded-b-lg space-x-2">
+                <button id="edit-link-modal-close" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-md text-white transition-colors">取消</button>
+                <button id="edit-link-modal-save" class="bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-md text-white font-semibold transition-colors">保存</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const addProjectBtn = document.getElementById('add-project-btn');
+        const projectsContainer = document.getElementById('projects-container');
+        let data = [];
+
+        // 移动模态框变量
+        const moveModal = document.getElementById('move-modal');
+        const moveModalTitle = document.getElementById('move-modal-title');
+        const moveModalOptions = document.getElementById('move-modal-options');
+        const moveModalClose = document.getElementById('move-modal-close');
+        let nodeToMoveId = null;
+
+        // --- 新增的编辑模态框变量 ---
+        const editLinkModal = document.getElementById('edit-link-modal');
+        const editLinkModalClose = document.getElementById('edit-link-modal-close');
+        const editLinkModalSave = document.getElementById('edit-link-modal-save');
+        const editLinkName = document.getElementById('edit-link-name');
+        const editLinkUrl = document.getElementById('edit-link-url');
+        const editLinkAuthor = document.getElementById('edit-link-author');
+        const editLinkCategory = document.getElementById('edit-link-category');
+        const editLinkTags = document.getElementById('edit-link-tags');
+        let nodeToEditId = null;
+
+        // --- 基础函数 (来自V2.2) ---
+        function loadData() { /* ... (no changes) ... */ }
+        function saveData() { /* ... (no changes) ... */ }
+        function findNode(id, nodes) { /* ... (no changes) ... */ }
+        function findNodeAndParent(id, nodes, parent = null) { /* ... (no changes) ... */ }
+        function generateMoveOptions(nodes, pathPrefix = '', idToExclude) { /* ... (no changes) ... */ }
+
+        function render() {
+            projectsContainer.innerHTML = '';
+            if (data.length === 0) {
+                 projectsContainer.innerHTML = `<div class="text-center text-gray-500 bg-gray-800 p-6 rounded-lg">你的灵感库是空的，从新建一个项目开始吧。</div>`;
+            } else {
+                renderChildren(data, projectsContainer, 0);
+            }
+        }
+
+        // --- 升级后的渲染函数，增加了“编辑”按钮 ---
+        function renderChildren(nodes, container, level) {
+            nodes.forEach(node => {
+                const element = document.createElement('div');
+                element.style.marginLeft = `${level * 20}px`;
+                
+                if (node.type === 'link') {
+                    const meta = node.metadata || {};
+                    const tagsHTML = (meta.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('');
+                    element.className = 'bg-gray-700/60 p-3 rounded-md my-1';
+                    element.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <a href="${node.url}" target="_blank" rel="noopener noreferrer" class="font-semibold text-lg hover:text-teal-300 transition-colors truncate">
+                                <span class="mr-2">🔗</span>${node.name}
+                            </a>
+                            <div class="flex items-center flex-shrink-0">
+                                <button class="edit-link-btn text-gray-400 hover:text-teal-400 px-2 py-1" data-id="${node.id}" title="编辑">✏️</button>
+                                <button class="move-btn text-gray-400 hover:text-teal-400 px-2 py-1" data-id="${node.id}" title="移动">➡️</button>
+                                <button class="delete-btn text-gray-400 hover:text-red-500 px-2 py-1" data-id="${node.id}" title="删除">×</button>
+                            </div>
+                        </div>
+                        <div class="mt-2 pl-7 text-sm text-gray-400 space-y-1">
+                            ${meta.author ? `<p><strong>作者:</strong> ${meta.author}</p>` : ''}
+                            ${meta.category ? `<p><strong>门类:</strong> ${meta.category}</p>` : ''}
+                            ${tagsHTML ? `<div class="mt-2">${tagsHTML}</div>` : ''}
+                        </div>`;
+                } else { // project or folder
+                    const isProject = node.type === 'project';
+                    element.className = `${isProject ? 'bg-gray-800' : 'bg-gray-800/60'} rounded-lg shadow-md my-2`;
+                    element.innerHTML = `
+                        <div class="header flex justify-between items-center p-3 cursor-pointer">
+                            <div class="flex items-center truncate">
+                                <span class="icon mr-2 transform">${node.children.length > 0 ? '▶' : '•'}</span>
+                                <h3 class="text-lg font-semibold ${isProject ? 'text-teal-300' : 'text-sky-300'} truncate">${isProject ? '🗂️' : '📁'} ${node.name}</h3>
+                                <span class="text-sm text-gray-400 ml-2 flex-shrink-0">(${node.children.length})</span>
+                            </div>
+                            <div class="actions space-x-1 flex-shrink-0">
+                                <button class="edit-btn text-xs bg-yellow-600/80 hover:bg-yellow-600 px-2 py-1 rounded" data-id="${node.id}">编辑</button>
+                                <button class="move-btn text-xs bg-gray-600/80 hover:bg-gray-600 px-2 py-1 rounded" data-id="${node.id}">移动</button>
+                                <button class="add-link-btn text-xs bg-green-600/80 hover:bg-green-600 px-2 py-1 rounded" data-id="${node.id}">+链接</button>
+                                <button class="add-folder-btn text-xs bg-sky-600/80 hover:bg-sky-600 px-2 py-1 rounded" data-id="${node.id}">+文件夹</button>
+                                <button class="delete-btn text-xs bg-red-600/80 hover:bg-red-600 px-2 py-1 rounded" data-id="${node.id}">删除</button>
+                            </div>
+                        </div>
+                        <div class="content-node px-3 pb-2"></div>`;
+                    const childrenContainer = element.querySelector('.content-node');
+                    if (node.children && node.children.length > 0) renderChildren(node.children, childrenContainer, 0);
+                    else childrenContainer.innerHTML = `<p class="text-gray-600 text-sm p-2">这里是空的...</p>`;
+                }
+                container.appendChild(element);
+            });
+        }
+        
+        // --- V2.2的`addProjectBtn`监听器，保持不变 ---
+        addProjectBtn.addEventListener('click', () => { /* ... (no changes) ... */ });
+
+        // --- 升级后的主事件监听器，增加了编辑逻辑 ---
+        projectsContainer.addEventListener('click', e => {
+            const button = e.target.closest('button[data-id]');
+            const header = e.target.closest('.header');
+
+            if (button) {
+                e.stopPropagation();
+                const id = parseInt(button.dataset.id);
+
+                if (button.classList.contains('edit-btn')) {
+                    const nodeToEdit = findNode(id, data);
+                    if (!nodeToEdit) return;
+                    const newName = prompt(`重命名 "${nodeToEdit.name}":`, nodeToEdit.name);
+                    if (newName && newName.trim()) {
+                        nodeToEdit.name = newName.trim();
+                        saveData();
+                        render();
+                    }
+                } else if (button.classList.contains('edit-link-btn')) {
+                    nodeToEditId = id;
+                    const nodeToEdit = findNode(id, data);
+                    if (!nodeToEdit) return;
+                    
+                    const meta = nodeToEdit.metadata || {};
+                    editLinkName.value = nodeToEdit.name;
+                    editLinkUrl.value = nodeToEdit.url;
+                    editLinkAuthor.value = meta.author || '';
+                    editLinkCategory.value = meta.category || '';
+                    editLinkTags.value = (meta.tags || []).join(', ');
+
+                    editLinkModal.classList.remove('hidden');
+
+                } else if (button.classList.contains('move-btn')) {
+                    // ... (V2.2的移动逻辑，保持不变) ...
+                    nodeToMoveId = id;
+                    const nodeToMove = findNode(id, data);
+                    moveModalTitle.textContent = `移动 "${nodeToMove.name}" 到...`;
+                    const options = generateMoveOptions(data, '', id);
+                    moveModalOptions.innerHTML = ''; 
+                    const rootOption = document.createElement('button');
+                    rootOption.className = 'w-full p-3 rounded-md transition-colors block';
+                    rootOption.textContent = '🗂️ (根目录)';
+                    rootOption.dataset.targetId = 'root';
+                    moveModalOptions.appendChild(rootOption);
+                    options.forEach(opt => {
+                        const optionBtn = document.createElement('button');
+                        optionBtn.className = 'w-full p-3 rounded-md transition-colors block';
+                        optionBtn.textContent = `📁 ${opt.path}`;
+                        optionBtn.dataset.targetId = opt.id;
+                        moveModalOptions.appendChild(optionBtn);
+                    });
+                    moveModal.classList.remove('hidden');
+                } else if (button.classList.contains('delete-btn')) {
+                    // ... (V2.2的删除逻辑，保持不变) ...
+                    const result = findNodeAndParent(id, data);
+                    if (!result) return;
+                    if(confirm(`确定要删除 "${result.node.name}" 吗？`)) {
+                        const parentChildren = result.parent ? result.parent.children : data;
+                        const index = parentChildren.findIndex(n => n.id === id);
+                        if (index > -1) { parentChildren.splice(index, 1); saveData(); render(); }
+                    }
+                } else if (button.classList.contains('add-folder-btn')) {
+                    // ... (V2.2的添加文件夹逻辑，保持不变) ...
+                    const name = prompt("输入新文件夹名称:");
+                    if (name && name.trim()) { const parentNode = findNode(id, data); if (parentNode) { parentNode.children.unshift({ id: Date.now(), name: name.trim(), type: 'folder', children: [] }); saveData(); render(); } }
+                } else if (button.classList.contains('add-link-btn')) {
+                    // ... (V2.2的添加链接逻辑，保持不变) ...
+                    const name = prompt("输入链接标题:");
+                    if (!name || !name.trim()) return;
+                    const url = prompt("输入链接 URL:", "https://");
+                    if (!url || !url.trim()) return;
+                    const author = prompt("作者 (选填):");
+                    const category = prompt("门类 (选填):");
+                    const tagsStr = prompt("标签 (用英文逗号 , 分隔, 选填):");
+                    const newNode = { id: Date.now(), name: name.trim(), type: 'link', url: url.trim(), metadata: { author: author ? author.trim() : '', category: category ? category.trim() : '', tags: tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [] } };
+                    const parentNode = findNode(id, data);
+                    if (parentNode) { parentNode.children.unshift(newNode); saveData(); render(); }
+                }
+                return;
+            }
+
+            if (header) { /* ... (V2.2的展开/折叠逻辑，保持不变) ... */ }
+        });
+
+        // V2.2的移动模态框事件监听，保持不变
+        moveModalClose.addEventListener('click', () => { /* ... (no changes) ... */ });
+        moveModalOptions.addEventListener('click', e => { /* ... (no changes) ... */ });
+        
+        // --- 新增的编辑链接模态框事件监听 ---
+        editLinkModalClose.addEventListener('click', () => {
+            editLinkModal.classList.add('hidden');
+            nodeToEditId = null;
+        });
+
+        editLinkModalSave.addEventListener('click', () => {
+            if (!nodeToEditId) return;
+            const node = findNode(nodeToEditId, data);
+            if (node) {
+                node.name = editLinkName.value.trim();
+                node.url = editLinkUrl.value.trim();
+                node.metadata = {
+                    author: editLinkAuthor.value.trim(),
+                    category: editLinkCategory.value.trim(),
+                    tags: editLinkTags.value.split(',').map(t => t.trim()).filter(t => t)
+                };
+                saveData();
+                render();
+                editLinkModal.classList.add('hidden');
+                nodeToEditId = null;
+            }
+        });
+
+        loadData();
+        
+        // --- Refill unchanged code for completeness ---
+        function loadData() { const savedData = localStorage.getItem('inspirationNavigatorDataV2_Plus'); if (savedData) data = JSON.parse(savedData); else data = []; render(); }
+        function saveData() { localStorage.setItem('inspirationNavigatorDataV2_Plus', JSON.stringify(data)); }
+        function findNode(id, nodes) { for (const n of nodes) { if (n.id == id) return n; if (n.children) { const f = findNode(id, n.children); if (f) return f; } } return null; }
+        function findNodeAndParent(id, nodes, parent = null) { for (const node of nodes) { if (node.id == id) return { node, parent }; if (node.children) { const found = findNodeAndParent(id, node.children, node); if (found) return found; } } return null; }
+        function generateMoveOptions(nodes, pathPrefix = '', idToExclude) { let options = []; for (const node of nodes) { if (node.id === idToExclude) continue; if (node.type === 'project' || node.type === 'folder') { const currentPath = pathPrefix ? `${pathPrefix} / ${node.name}` : node.name; options.push({ id: node.id, path: currentPath }); if (node.children) { options = options.concat(generateMoveOptions(node.children, currentPath, idToExclude)); } } } return options; }
+        addProjectBtn.addEventListener('click', () => { const name = prompt("输入新项目名称:"); if (name && name.trim()) { data.unshift({ id: Date.now(), name: name.trim(), type: 'project', children: [] }); saveData(); render(); } });
+        moveModalClose.addEventListener('click', () => { moveModal.classList.add('hidden'); });
+        moveModalOptions.addEventListener('click', e => { const targetBtn = e.target.closest('button[data-target-id]'); if (!targetBtn || !nodeToMoveId) return; const targetId = targetBtn.dataset.targetId; const result = findNodeAndParent(nodeToMoveId, data); if (!result) return; const sourceChildren = result.parent ? result.parent.children : data; const index = sourceChildren.findIndex(n => n.id === nodeToMoveId); if (index > -1) { const [node] = sourceChildren.splice(index, 1); if (targetId === 'root') { if (node.type === 'folder') node.type = 'project'; data.unshift(node); } else { const destinationNode = findNode(parseInt(targetId), data); if (node.type === 'project') node.type = 'folder'; destinationNode.children.unshift(node); } saveData(); render(); moveModal.classList.add('hidden'); nodeToMoveId = null; } });
+        projectsContainer.addEventListener('click', e => { const button = e.target.closest('button[data-id]'); const header = e.target.closest('.header'); if(button){ e.stopPropagation(); /* ... inner logic from above ... */ } else if (header) { const content = header.nextElementSibling; if (content) { content.classList.toggle('open'); header.querySelector('.icon')?.classList.toggle('open'); } } });
+
+    });
+    </script>
+</body>
+</html>
+
+
+
